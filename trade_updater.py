@@ -191,7 +191,33 @@ def get_data_from_unipass_by_new_product(start_date, end_date):
     files = glob(download_folder + "*.xls")
     df = pd.concat([pd.read_excel(file, encoding='euc-kr')
                  for file in files], axis=0).drop_duplicates()
-    df.to_excel(new_product_folder +f'신성질별 수출입실적_{start_date}.xls', encoding='euc-kr', index=False)
+    
+    path = new_product_folder +f'신성질별 수출입실적_{start_date}.xls'
+    df.to_excel(path, encoding='euc-kr', index=False)
+    helper.del_all_files_in_download()
+
+def get_hscode(hscode):
+    url = f'https://unipass.customs.go.kr/ets/hmpg/openTRS0107001Q.do?hsSgn={hscode}&hsSgnLen=6'
+    driver.get(url)
+    time.sleep(3)
+     
+     # 창열기
+    selector = "#TRS0107001Q_table > tbody > tr > td"
+    element = driver.find_elements_by_css_selector(selector)
+    # 결과 list로 추출
+    element_to_list = [row.text for row in element]  
+       # 결과가 없는 경우가 있음. 이럴 경우 1줄로 '조회결과없다'고 나옴
+    if len(element_to_list) > 1:
+        try:
+            codes = element_to_list[1::5]  # HS부호
+            names_kr = element_to_list[2::5]  # HS부호명
+            names_en = element_to_list[3::5]  # HS부호영문명
+            apply_date = element_to_list[4::5]  # HS부호적용개시일자
+            return pd.DataFrame([codes, names_kr, names_en, apply_date]).T
+        except:
+            print(f'{hscode} 작업실패')
+    else:
+        print(f'{hscode} 결과없음')
 
 # 관세청에서 HScode 6자리 명칭 가져오기
 @helper.timer
@@ -202,28 +228,14 @@ def get_6_hscode_from_unipass():
     driver = webdriver.Chrome()
     hs_codes_all = conn_db.from_('Master_수출입품목', '신성질_HS코드품목연계')
     hs_codes_all = hs_codes_all['HS코드_4자리'].unique().tolist()
-
-    def get_hscode(hscode):
-        driver.get(f'https://unipass.customs.go.kr/ets/hmpg/openTRS0107001Q.do?hsSgn={hscode}&hsSgnLen=6')
-        time.sleep(3)
-
-        # 창열기
-        element = driver.find_elements_by_css_selector("#TRS0107001Q_table > tbody > tr > td")
-        element_to_list = [row.text for row in element]  # 결과 list로 추출
-        # 결과가 없는 경우가 있음. 이럴 경우 1줄로 '조회결과없다'고 나옴
-        if len(element_to_list) > 1:
-            try:
-                codes = element_to_list[1::5]  # HS부호
-                names_kr = element_to_list[2::5]  # HS부호명
-                names_en = element_to_list[3::5]  # HS부호영문명
-                apply_date = element_to_list[4::5]  # HS부호적용개시일자
-                return pd.DataFrame([codes, names_kr, names_en, apply_date]).T
-            except:
-                print(f'{hscode} 작업실패')
-        else:
-            print(f'{hscode} 결과없음')
+    
     df = pd.concat([get_hscode(code) for code in hs_codes_all])
     driver.quit()
-    df = df.rename(columns={0: 'HS코드_6자리', 1: '세번6단위품명',
-                         2: '세번6단위품명(영문)', 3: '적용개시일자'}).reset_index(drop=True).drop_duplicates()
+    
+    names = {0:'HS코드_6자리', 
+            1: '세번6단위품명',
+            2: '세번6단위품명(영문)', 
+            3: '적용개시일자'}
+    df.rename(columns=names, inplace=True)
+    df = df.drop_duplicates().reset_index(drop=True)
     conn_db.to_(df, 'Master_Master_수출입품목', 'HS코드품목_6자리')
