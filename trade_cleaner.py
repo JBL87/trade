@@ -4,7 +4,7 @@ import conn_db
 import helper
 
 # 수출입 금액 단위, 무역규모, 무역수지, ton당 금액 계산
-def add_units(df):
+def _add_units(df):
     trade_types = ['수출','수입']
     unit_types = ['백만', '억']
     unit_dict = {'백만': 1000,
@@ -70,7 +70,7 @@ def clean_trade_by_new_type():
     df = map_df.merge(result_df, left_on='세세분류명', right_on='성질명',
                       how='inner').drop(columns='성질명')
 
-    df = trade_cleaner.add_units(df)
+    df = _add_units(df)
 
     [df.rename(columns={col: col[:-1]}, inplace=True)
      for col in df.columns.tolist() if '분류명' in col]
@@ -85,7 +85,7 @@ def clean_trade_by_new_type():
                     '수출중량 (ton)','수입중량 (ton)','수입금액 (천$)',  '수출금액 (천$)',
                     '무역수지 (천$)','무역규모 (천$)']
     # 저장
-    conn_db.export_(df[cols_long], '신성질별_수출입')
+    conn_db.export_(df[cols_long], '수출입_신성질별')
     for sheet in ['DB_수출입_신성질별','수출입_신성질별_대시보드']:
         conn_db.to_(df[cols_short], sheet, 'import')
 
@@ -115,7 +115,7 @@ def clean_trade_by_product_type():
     for col in value_cols:
         df[col] = pd.to_numeric(df[col].str.replace(',', ''))
 
-    df = trade_cleaner.add_units(df)
+    df = _add_units(df)
 
     cols_long = ['날짜','대분류','수출중량 (ton)','수입중량 (ton)',
                 '수출금액 (천$)','수입금액 (천$)', '무역규모 (천$)','무역수지 (천$)',
@@ -158,10 +158,11 @@ def clean_trade_by_country():
     for col in value_cols:
         df[col] = pd.to_numeric(df[col].str.replace(',', ''))
 
-    df = trade_cleaner.add_units(df)
+    df = _add_units(df)
     # 저장
     conn_db.export_(df[cols_long], '수출입_국가별')
-    conn_db.to_(df[cols_short], 'DB_수출입_품목별', 'import')
+    for sheet in ['DB_수출입_국가별','DB_수출입_국가별_대시보드']:
+        conn_db.to_(df[cols_short], sheet, 'import')
 
 # 수출입 전체 취합본
 def union_trade_data():
@@ -213,14 +214,8 @@ def clean_trady_by_country_new_type():
     df = map_df.merge(df, left_on='세세분류명', right_on='성질명', how='inner')
     df = df.drop(columns='성질명').rename(columns={'국가명': '국가'})
 
-    for unit_type in unit_types:
-        for trade_type in trade_types:
-            df[f'{trade_type}금액 ({unit_type}$)'] = df[f'{trade_type}금액 (천$)'] / unit_dict[unit_type]
-        df[f'무역규모 ({unit_type}$)'] = df[f'수출금액 ({unit_type}$)'] + df[f'수입금액 ({unit_type}$)']
-        df[f'무역수지 ({unit_type}$)'] = df[f'수출금액 ({unit_type}$)'] - df[f'수입금액 ({unit_type}$)']
-    df['수출ton당 (천$/ton)'] = df['수출금액 (천$)'] / df['수출중량 (ton)']
-    df['수입ton당 (천$/ton)'] = df['수입금액 (천$)'] / df['수입중량 (ton)']
-    df['dataset'] = '국가별 신성질별'
+    df = _add_units(df)
+
     [df.rename(columns={col: col[:-1]}, inplace=True) for col in df.columns.tolist() if '분류명' in col]
     df['날짜'] = df['날짜'].str.replace('.', '-')
 
