@@ -10,8 +10,6 @@ from selenium.webdriver.support.select import Select
 # from selenium.webdriver.support import expected_conditions as EC
 
 download_folder = helper.download_folder
-new_product_folder = conn_db.get_path('신성질별_수출입')
-# trade_save_path = r"C:\Users\bong2\OneDrive\DataArchive\DB_기타_출입국,수출입\00_CSV_pickle\\"
 
 # 관세청 품목별 수출입 데이터가져오기 (hs코드 10자리)
 @helper.timer
@@ -119,7 +117,7 @@ def get_data_from_unipass_by_product_10hscode(code_list, start_date, end_date):
 
 # 신성질별 수출입 실적 다운로드
 @helper.timer
-def get_data_from_unipass_by_new_product(start_date, end_date):
+def get_data_from_unipass_by_new_product(start_date, end_date=0):
     '''
     신성질별 수출입 실적 다운로드
     start_date, end_date = 'yyyy.mm'
@@ -145,6 +143,7 @@ def get_data_from_unipass_by_new_product(start_date, end_date):
     # 시작날짜 설정
     driver.find_element_by_css_selector('#TRS0104011Q_priodFr').click()  # 시작날짜 선택 드룹다운 열기
     Select(driver.find_element_by_css_selector('#TRS0104011Q_priodFr')).select_by_visible_text(start_date)  # 시작날짜 설정
+
     # 종료날짜 설정. 조회기간 'to' 클릭해서 dropdown 열기
     driver.find_element_by_css_selector('#TRS0104011Q_priodTo').click()
     if end_date == 0:
@@ -152,50 +151,40 @@ def get_data_from_unipass_by_new_product(start_date, end_date):
         Select(driver.find_element_by_css_selector('#TRS0104011Q_priodTo')).select_by_index(0)
     else: # 종료날짜 설정
         Select(driver.find_element_by_css_selector('TRS0104011Q_priodTo')).select_by_visible_text(end_date)
-    # driver.find_element_by_css_selector('#TRS0104011Q_priodTo').click()  # 조회기간 'to' dropdown 닫음
-
     driver.find_element_by_css_selector('#TRS0104011Q_detailTmpr').click()  # 세부성질 클릭
 
-    # 수출선택
-    driver.find_element_by_css_selector('#TRS0104011Q_expTpcd').click()
-    # 조회클릭
-    selector = '#TRS0104011Q_fmSearch > div > footer > button'
-    driver.find_element_by_css_selector(selector).submit()
-    time.sleep(30)
+    # 수출, 수입 선택후 다운로드
+    trade_types = {'expTpcd': '수출',
+                'impTpcd': '수입'}
+    path = conn_db.get_path('신성질별_수출입_raw')
 
-    try:  # 수출 엑셀다운로드
-        driver.find_element_by_css_selector('#TRS0104011Q_downExcel_double').send_keys('\n')
-    except:
-        time.sleep(10)  # 조회결과 기다리기
-        driver.find_element_by_css_selector('#TRS0104011Q_downExcel_double').send_keys('\n')
-    time.sleep(10)  # 다운로드 기다리기
+    for trade_type in trade_types.keys():
+        # 수출, 수입 선택
+        driver.find_element_by_css_selector(f'#TRS0104011Q_{trade_type}').click()
 
-    # 수입선택
-    driver.find_element_by_css_selector('#TRS0104011Q_impTpcd').click()
-    # 조회버튼클릭
-    driver.find_element_by_css_selector('#TRS0104011Q_fmSearch > div > footer > button').submit()
+        # 조회클릭
+        selector = '#TRS0104011Q_fmSearch > div > footer > button'
+        driver.find_element_by_css_selector(selector).submit()
+        time.sleep(30)
 
-    time.sleep(3)  # 조회결과 기다리기
+        start = len(glob(download_folder+'*.xls'))
+        try:  # 다운로드 버튼 클릭
+            driver.find_element_by_css_selector(
+                '#TRS0104011Q_downExcel_double').send_keys('\n')
+        except:  # 다운로드 버튼 재클릭
+            time.sleep(5)
+            driver.find_element_by_css_selector(
+                '#TRS0104011Q_downExcel_double').send_keys('\n')
 
-    # 수입 엑셀다운로드
-    try: # 엑셀다운로드
-        driver.find_element_by_css_selector('#TRS0104011Q_downExcel_double').send_keys('\n')
-    except: # 조회결과 기다리기
-        time.sleep(10)
-        # 엑셀다운로드
-        driver.find_element_by_css_selector('#TRS0104011Q_downExcel_double').send_keys('\n')
-    time.sleep(10)  # 다운로드 기다리기
-    driver.quit()
+        while len(glob(download_folder+'*.xls')) == start:
+            time.sleep(3)
 
-    #취합해서 저장하기----------------------------------
-    files = glob(download_folder + "*.xls")
-    df = pd.concat([pd.read_excel(file, encoding='euc-kr')
-                 for file in files], axis=0).drop_duplicates()
-    
-    path = new_product_folder +f'신성질별 수출입실적_{start_date}.xls'
-    df.to_excel(path, encoding='euc-kr', index=False)
-    helper.del_all_files_in_download()
+        old_file = glob(download_folder+'*.xls')[0]
+        new_file = path + f'신성질별 {trade_types[trade_type]}실적_{start_date[:4]}.xls'
 
+        shutil.move(src=old_file, dst=new_file)
+
+# 관세청 HScode 6자리 명칭 가져오기
 def get_hscode(hscode):
     url = f'https://unipass.customs.go.kr/ets/hmpg/openTRS0107001Q.do?hsSgn={hscode}&hsSgnLen=6'
     driver.get(url)
@@ -204,9 +193,11 @@ def get_hscode(hscode):
      # 창열기
     selector = "#TRS0107001Q_table > tbody > tr > td"
     element = driver.find_elements_by_css_selector(selector)
+
     # 결과 list로 추출
     element_to_list = [row.text for row in element]  
-       # 결과가 없는 경우가 있음. 이럴 경우 1줄로 '조회결과없다'고 나옴
+
+    # 결과가 없는 경우가 있음. 이럴 경우 1줄로 '조회결과없다'고 나옴
     if len(element_to_list) > 1:
         try:
             codes = element_to_list[1::5]  # HS부호
@@ -219,9 +210,9 @@ def get_hscode(hscode):
     else:
         print(f'{hscode} 결과없음')
 
-# 관세청에서 HScode 6자리 명칭 가져오기
+# 관세청에서 HScode 6자리 명칭 update
 @helper.timer
-def get_6_hscode_from_unipass():
+def update_6_hscode_from_unipass():
     '''
     HScode 6자리 명칭 가져와서 구글시트 업로드
     '''
@@ -229,7 +220,11 @@ def get_6_hscode_from_unipass():
     hs_codes_all = conn_db.from_('Master_수출입품목', '신성질_HS코드품목연계')
     hs_codes_all = hs_codes_all['HS코드_4자리'].unique().tolist()
     
-    df = pd.concat([get_hscode(code) for code in hs_codes_all])
+    df = pd.DataFrame()
+    for code in hs_codes_all:
+        temp = get_hscode(code)
+        df = df.append(temp, ignore_index=True)
+        time.sleep(2)
     driver.quit()
     
     names = {0:'HS코드_6자리', 
