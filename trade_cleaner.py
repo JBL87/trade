@@ -29,7 +29,6 @@ def _add_units(df):
     return df
 
 # 신성질별 수출입
-@helper.timer
 def clean_trade_by_new_type():
     # 불러와서 합치기
     all_files = glob(conn_db.get_path('신성질별_수출입_raw') + "*.xls")
@@ -90,7 +89,6 @@ def clean_trade_by_new_type():
         conn_db.to_(df[cols_short], sheet, 'import')
 
 # 품목별 수출입
-@helper.timer
 def clean_trade_by_product_type():
     all_files = glob(conn_db.get_path('품목별_수출입') + "*.xls")
     df = pd.concat([pd.read_excel(file, skiprows=4)
@@ -132,7 +130,6 @@ def clean_trade_by_product_type():
     conn_db.to_(df[cols_short], 'DB_수출입_품목별', 'import')
 
 # 국가별 수출입
-@helper.timer
 def clean_trade_by_country():
     all_files = glob(conn_db.get_path('국가별_수출입_raw') + "*.xls")
     df = pd.concat([pd.read_excel(file, skiprows=4)
@@ -159,10 +156,15 @@ def clean_trade_by_country():
         df[col] = pd.to_numeric(df[col].str.replace(',', ''))
 
     df = _add_units(df)
+    cols = ['날짜','국가','수출건수 (건)','수출금액 (천$)',
+            '수입건수 (건)','수입금액 (천$)','무역수지 (천$)','무역규모 (천$)',
+            '수출 건당 (천$/건)','수입 건당 (천$/건)',
+            '수출금액 (백만$)','수입금액 (백만$)','무역규모 (백만$)','무역수지 (백만$)',
+            '수출금액 (억$)','수입금액 (억$)','무역규모 (억$)','무역수지 (억$)']
     # 저장
-    conn_db.export_(df[cols_long], '수출입_국가별')
+    conn_db.export_(df[cols], '수출입_국가별')
     for sheet in ['DB_수출입_국가별','DB_수출입_국가별_대시보드']:
-        conn_db.to_(df[cols_short], sheet, 'import')
+        conn_db.to_(df[cols], sheet, 'import')
 
 # 수출입 전체 취합본
 def union_trade_data():
@@ -180,7 +182,6 @@ def union_trade_data():
     conn_db.export_(df,'수출입실적')
 
 # 국가별 신성질별 수출입
-@helper.timer
 def clean_trady_by_country_new_type():
     folder = conn_db.get_path('국가별_신성질별_수출입')
     all_files = glob(folder + "*.xls")
@@ -220,7 +221,6 @@ def clean_trady_by_country_new_type():
     df['날짜'] = df['날짜'].str.replace('.', '-')
 
 # 수출입실적 HS코드10자리 데이터 전처리
-@helper.timer
 def clean_data_from_unipass_by_product_10hscode():
     # 다운받을때 마다 오류가 계속 발생해서 수작업으로 jupyter에서 진행후
     # 다운로드폴더에 취합된 '취합본'만 남겨놓고 이 코드 실행
@@ -287,7 +287,6 @@ def clean_data_from_unipass_by_product_10hscode():
     print('10자리 HS코드 전처리 완료후 저장')
 
 # 수출입 hs코드 신성질별 분류파일 정리용
-@helper.timer
 def clean_hscode_file():
     '''
     수출입 hs코드 신성질별 분류파일 정리용
@@ -363,8 +362,7 @@ def clean_hscode_file():
     conn_db.to_(df, 'Master_수출입품목', '신성질_HS코드품목연계')
     print('품목별 HSCODE표 구글시트 업로드 완료')
 
-# istans에서 받은 코드표 정리
-@helper.timer
+# istans에서 받은 코드표 정리 
 def istans_hs_code_table():
     df = conn_db.from_('Master_수출입품목', 'istans_원본수정')
 
