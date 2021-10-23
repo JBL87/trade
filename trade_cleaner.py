@@ -90,7 +90,7 @@ def clean_trade_by_new_type():
 
 # 품목별 수출입
 def clean_trade_by_product_type():
-    all_files = glob(conn_db.get_path('품목별_수출입') + "*.xls")
+    all_files = glob(conn_db.get_path('품목별_수출입_raw') + "*.xls")
     df = pd.concat([pd.read_excel(file, skiprows=4)
                     for file in all_files], axis=0).drop_duplicates()
 
